@@ -4,5 +4,3 @@ export interface Assignment {
     description: string;
     correctAnswer: string;
 }
-
-export const assignments: Assignment[] = []; // Sample data store for assignments
