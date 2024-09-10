@@ -47,8 +47,4 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
-
-# Database
-db.sqlite
-
 *.env

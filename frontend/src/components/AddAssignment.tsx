@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const AddAssignment: React.FC = () => {
+const AddAssignment: React.FC = () => { // Make sure to define this as a React function component
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [correctAnswer, setCorrectAnswer] = useState('');
@@ -24,29 +24,29 @@ const AddAssignment: React.FC = () => {
     };
 
     return (
-        <div>
+        <React.Fragment>
             <h2>Add Assignment</h2>
-                <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit}>
                 <input
                     type="text"
-                placeholder="Title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
                 />
                 <textarea
-                placeholder="Description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
                 />
                 <textarea
-                placeholder="Correct Answer"
-                value={correctAnswer}
-                onChange={(e) => setCorrectAnswer(e.target.value)}
+                    placeholder="Correct Answer"
+                    value={correctAnswer}
+                    onChange={(e) => setCorrectAnswer(e.target.value)}
                 />
                 <button type="submit">Add Assignment</button>
-                </form>
-                </div>
-            )
+            </form>
+        </React.Fragment>
+    );
 };
 
 export default AddAssignment;
