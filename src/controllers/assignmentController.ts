@@ -1,8 +1,10 @@
-import { Request, Response } from 'express';
+import {Request, Response} from 'express';
 import sqlite3 from 'sqlite3';
-import { open, Database } from 'sqlite';
+import {Database, open} from 'sqlite';
 import OpenAI from 'openai';
 import dotenv from "dotenv";
+
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Load environment variables from .env file
 dotenv.config();
@@ -19,6 +21,21 @@ async function getDbConnection(): Promise<Database> {
         driver: sqlite3.Database // Specify the driver
     });
 }
+
+
+// Function to call Gemini's API (Replace with actual implementation)
+async function getGeminiFeedback(prompt: string): Promise<string> {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    try {
+        const result = model.generateContent(prompt)
+        return await result;
+    } catch (error) {
+        console.error('Error calling Gemini API:', error);
+        throw new Error('Failed to fetch feedback from Gemini.');
+    }
+}
+
 
 // Get all assignments
 export const getAssignments = async (req: Request, res: Response) => {
@@ -77,18 +94,30 @@ export const checkAssignment = async (req: Request, res: Response) => {
         
         Feedback:`;
 
-        const response = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [
-                { role: "system", content: "You are a programming instructor." },
-                { role: "user", content: prompt },
-            ],
-        });
+        // Fetch feedback from OpenAI and Gemini APIs in parallel
+        const [openaiResponse, geminiResponse] = await Promise.all([
+            openai.chat.completions.create({
+                model: "gpt-3.5-turbo",
+                messages: [
+                    { role: "system", content: "You are a programming instructor." },
+                    { role: "user", content: prompt },
+                ],
+            }),
+            getGeminiFeedback(prompt)
+        ]);
 
-        const feedback = response.choices[0]?.message?.content;
-        res.json({ feedback });
+        // Extract feedback from OpenAI response
+        const openaiFeedback = openaiResponse.choices[0]?.message?.content;
+        // @ts-ignore
+        const geminiFeedback = geminiResponse.response?.candidates[0]?.content?.parts[0]?.text;
+
+        // Send both feedbacks to the client
+        res.json({
+            openaiFeedback,
+            geminiFeedback,
+        });
     } catch (error) {
-        console.error(error);
+        console.error('Error processing the request:', error);
         res.status(500).json({ error: 'Error processing the request.' });
     }
 };

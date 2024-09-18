@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
 import axios from 'axios';
+import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 
-const CheckAssignment: React.FC = () => {
+const CheckAssignment = () => {
     const [assignmentId, setAssignmentId] = useState('');
     const [studentAnswer, setStudentAnswer] = useState('');
-    const [feedback, setFeedback] = useState('');
+    const [openaiFeedback, setOpenaiFeedback] = useState('');
+    const [geminiFeedback, setGeminiFeedback] = useState('');
+    const [error, setError] = useState('');
 
     const handleCheck = async () => {
         try {
@@ -12,9 +15,14 @@ const CheckAssignment: React.FC = () => {
                 assignmentId,
                 studentAnswer,
             });
-            setFeedback(response.data.feedback);
+
+            // Assuming the response contains both OpenAI and Gemini feedback
+            setOpenaiFeedback(response.data.openaiFeedback);
+            setGeminiFeedback(response.data.geminiFeedback);
+            setError(''); // Clear any previous error
         } catch (error) {
             console.error('Error checking assignment:', error);
+            setError('Failed to check assignment. Please try again.');
         }
     };
 
@@ -33,10 +41,20 @@ const CheckAssignment: React.FC = () => {
                 onChange={(e) => setStudentAnswer(e.target.value)}
             />
             <button onClick={handleCheck}>Check Answer</button>
-            {feedback && (
+
+            {error && <p style={{ color: 'red' }}>{error}</p>}
+
+            {openaiFeedback && (
                 <div>
-                    <h3>Feedback:</h3>
-                    <p>{feedback}</p>
+                    <h3>OpenAI Feedback:</h3>
+                    <ReactMarkdown>{openaiFeedback}</ReactMarkdown>
+                </div>
+            )}
+
+            {geminiFeedback && (
+                <div>
+                    <h3>Gemini Feedback:</h3>
+                    <ReactMarkdown>{geminiFeedback}</ReactMarkdown>
                 </div>
             )}
         </div>
