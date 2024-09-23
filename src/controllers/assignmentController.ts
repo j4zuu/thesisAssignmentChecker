@@ -1,10 +1,21 @@
-import {Request, Response} from 'express';
+import { Request, Response } from 'express';
 import sqlite3 from 'sqlite3';
-import {Database, open} from 'sqlite';
+import { Database, open } from 'sqlite';
 import OpenAI from 'openai';
+import * as esprima from 'esprima';
+import estraverse from 'estraverse'; // For traversing the ASTs
 import dotenv from "dotenv";
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+console.log(esprima); // This should not be undefined
+
+// Structure to hold error positions
+interface ErrorLocation {
+    startLine: number;
+    startColumn: number;
+    endLine: number;
+    endColumn: number;
+    hint: string;
+}
 
 // Load environment variables from .env file
 dotenv.config();
@@ -18,24 +29,9 @@ const openai = new OpenAI({
 async function getDbConnection(): Promise<Database> {
     return open({
         filename: './database.sqlite',
-        driver: sqlite3.Database // Specify the driver
+        driver: sqlite3.Database, // Specify the driver
     });
 }
-
-
-// Function to call Gemini's API (Replace with actual implementation)
-async function getGeminiFeedback(prompt: string): Promise<string> {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    try {
-        const result = model.generateContent(prompt)
-        return await result;
-    } catch (error) {
-        console.error('Error calling Gemini API:', error);
-        throw new Error('Failed to fetch feedback from Gemini.');
-    }
-}
-
 
 // Get all assignments
 export const getAssignments = async (req: Request, res: Response) => {
@@ -75,6 +71,29 @@ export const addAssignment = async (req: Request, res: Response) => {
     }
 };
 
+// Compare two ASTs
+function compareASTs(studentAST: any, solutionAST: any): ErrorLocation[] {
+    const errorLocations: ErrorLocation[] = [];
+
+    estraverse.traverse(studentAST, {
+        enter: function (node: { type: any; loc: { start: { line: any; column: any; }; end: { line: any; column: any; }; }; }, parent: any) {
+            // Find the corresponding node in the solution AST
+            const correspondingNode = solutionAST.body.find((solNode: any) => solNode.type === node.type);
+            if (!correspondingNode) {
+                errorLocations.push({
+                    startLine: node.loc.start.line,
+                    startColumn: node.loc.start.column,
+                    endLine: node.loc.end.line,
+                    endColumn: node.loc.end.column,
+                    hint: `Check the usage of ${node.type}. It might not match the expected solution.`,
+                });
+            }
+        },
+    });
+
+    return errorLocations;
+}
+
 // Check a student's assignment answer
 export const checkAssignment = async (req: Request, res: Response) => {
     const { studentAnswer, assignmentId } = req.body;
@@ -86,35 +105,43 @@ export const checkAssignment = async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Assignment not found' });
         }
 
-        // Prepare the prompt for OpenAI API
-        const prompt = `Evaluate the following student answer against the correct answer. 
-        Assignment: ${assignment.title}
-        Correct Answer: ${assignment.solution}
-        Student Answer: ${studentAnswer}
-        
-        Feedback:`;
+        const correctSolution = assignment.solution;
 
-        // Fetch feedback from OpenAI and Gemini APIs in parallel
-        const [openaiResponse, geminiResponse] = await Promise.all([
-            openai.chat.completions.create({
-                model: "gpt-3.5-turbo",
-                messages: [
-                    { role: "system", content: "You are a programming instructor." },
-                    { role: "user", content: prompt },
-                ],
-            }),
-            getGeminiFeedback(prompt)
-        ]);
+        // Try to parse the student's code and the correct solution using esprima
+        let studentAST, solutionAST;
+        try {
+            studentAST = esprima.parseScript(studentAnswer, { loc: true });
+            solutionAST = esprima.parseScript(correctSolution, { loc: true });
+        } catch (error) {
+            return res.status(400).json({
+                error: 'Failed to parse student or solution code.',
+                details: error.message,
+            });
+        }
 
-        // Extract feedback from OpenAI response
+        // Compare the ASTs and get error locations
+        const errorLocations = compareASTs(studentAST, solutionAST);
+
+        // Prepare a prompt for OpenAI to get hints
+        const prompt = `Evaluate the following student's answer and provide constructive feedback for the following error locations: ${JSON.stringify(errorLocations)}. Student Answer: ${studentAnswer} Correct Solution: ${correctSolution}`;
+
+        const openaiResponse = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                { role: "system", content: "You are a programming instructor." },
+                { role: "user", content: prompt },
+            ],
+        });
+
         const openaiFeedback = openaiResponse.choices[0]?.message?.content;
-        // @ts-ignore
-        const geminiFeedback = geminiResponse.response?.candidates[0]?.content?.parts[0]?.text;
 
-        // Send both feedbacks to the client
+        // Send the feedback and error locations to the client
         res.json({
             openaiFeedback,
-            geminiFeedback,
+            errorLocations: errorLocations.map((error, index) => ({
+                ...error,
+                hint: openaiFeedback?.split('\n')[index] || error.hint, // Use AI-generated hints
+            })),
         });
     } catch (error) {
         console.error('Error processing the request:', error);
