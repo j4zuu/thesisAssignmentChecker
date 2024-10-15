@@ -120,8 +120,7 @@ export const checkAssignment = async (req: Request, res: Response) => {
             Student Answer: ${studentAnswer}
             Correct Solution: ${correctSolution}
         `;
-        console.log(studentAnswer)
-        console.log(correctSolution)
+
 
         const openaiResponse = await openai.chat.completions.create({
             model: "gpt-4o",
@@ -133,7 +132,6 @@ export const checkAssignment = async (req: Request, res: Response) => {
 
         // Extract and clean up the response
         let openaiFeedback = openaiResponse.choices[0]?.message?.content || "";
-        console.log(openaiFeedback)
         openaiFeedback = openaiFeedback.replace(/```json|```/g, "").trim();
 
         let errorLocations: ErrorLocation[] = [];
