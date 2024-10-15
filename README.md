@@ -1,8 +1,16 @@
-### Usage
-* Main (Run server): `node dist/app.js`
-* Frontend: `npm run dev`
+### Setup
+* Create .env file to project root folder with 
+  * OPENAI_API_KEY=example_key
+  * GEMINI_API_KEY=example2_key 
+* In root folder: `npm i`
+* Create dist folder: `npm run`
 * Initialize database: `npx ts-node src/database/initDatabase.ts`
 * Fill database with given assignments and answers: `npx ts-node src/database/SeedDatabase.ts`
+* In frontend folder: `npm i`
+
+### Usage
+* In root folder (Run server): `node dist/app.js`
+* In frontend folder (run frontend): `npm run dev`
 
 ### Notes:
 
