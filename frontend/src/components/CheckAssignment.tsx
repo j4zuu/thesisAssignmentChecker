@@ -21,7 +21,6 @@ const CheckAssignment = () => {
             const { openaiFeedback, errorLocations } = response.data;
 
             setOpenaiFeedback(openaiFeedback || 'No feedback from OpenAI');
-            setGeminiFeedback('No feedback from Gemini'); // Adjust if needed
             setError('');
 
             // Apply error markers if Monaco and the editor instance are available
@@ -30,9 +29,9 @@ const CheckAssignment = () => {
 
                 const markers = errorLocations.map((error: any) => ({
                     startLineNumber: error.startLine,
-                    startColumn: error.startColumn,
+                    startColumn: error.startColumn + 1, // Don't ask why. Too tired to hunt real reason
                     endLineNumber: error.endLine,
-                    endColumn: error.endColumn,
+                    endColumn: error.endColumn + 1,
                     message: error.hint, // AI-generated hint
                     severity: monaco.MarkerSeverity.Error,
                 }));
@@ -75,13 +74,6 @@ const CheckAssignment = () => {
                 <div>
                     <h3>OpenAI Feedback:</h3>
                     <p>{openaiFeedback}</p>
-                </div>
-            )}
-
-            {geminiFeedback && (
-                <div>
-                    <h3>Gemini Feedback:</h3>
-                    <p>{geminiFeedback}</p>
                 </div>
             )}
         </div>

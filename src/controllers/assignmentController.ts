@@ -6,8 +6,6 @@ import * as esprima from 'esprima';
 import estraverse from 'estraverse'; // For traversing the ASTs
 import dotenv from "dotenv";
 
-console.log(esprima); // This should not be undefined
-
 // Structure to hold error positions
 interface ErrorLocation {
     startLine: number;
@@ -71,21 +69,24 @@ export const addAssignment = async (req: Request, res: Response) => {
     }
 };
 
-// Compare two ASTs
 function compareASTs(studentAST: any, solutionAST: any): ErrorLocation[] {
     const errorLocations: ErrorLocation[] = [];
+    console.log("student here:", studentAST.body)
+    console.log("solution here:", solutionAST.body)
+
 
     estraverse.traverse(studentAST, {
-        enter: function (node: { type: any; loc: { start: { line: any; column: any; }; end: { line: any; column: any; }; }; }, parent: any) {
-            // Find the corresponding node in the solution AST
-            const correspondingNode = solutionAST.body.find((solNode: any) => solNode.type === node.type);
+        enter(node) {
+            const correspondingNode = solutionAST.body.find(
+                (solNode: any) => solNode.value === node.value
+            );
             if (!correspondingNode) {
                 errorLocations.push({
                     startLine: node.loc.start.line,
                     startColumn: node.loc.start.column,
                     endLine: node.loc.end.line,
                     endColumn: node.loc.end.column,
-                    hint: `Check the usage of ${node.type}. It might not match the expected solution.`,
+                    hint: `This part of your code doesn’t match the expected structure.`,
                 });
             }
         },
@@ -93,7 +94,6 @@ function compareASTs(studentAST: any, solutionAST: any): ErrorLocation[] {
 
     return errorLocations;
 }
-
 // Check a student's assignment answer
 export const checkAssignment = async (req: Request, res: Response) => {
     const { studentAnswer, assignmentId } = req.body;
@@ -107,40 +107,51 @@ export const checkAssignment = async (req: Request, res: Response) => {
 
         const correctSolution = assignment.solution;
 
-        // Try to parse the student's code and the correct solution using esprima
-        let studentAST, solutionAST;
-        try {
-            studentAST = esprima.parseScript(studentAnswer, { loc: true });
-            solutionAST = esprima.parseScript(correctSolution, { loc: true });
-        } catch (error) {
-            return res.status(400).json({
-                error: 'Failed to parse student or solution code.',
-                details: error.message,
-            });
-        }
-
-        // Compare the ASTs and get error locations
-        const errorLocations = compareASTs(studentAST, solutionAST);
-
-        // Prepare a prompt for OpenAI to get hints
-        const prompt = `Evaluate the following student's answer and provide constructive feedback for the following error locations: ${JSON.stringify(errorLocations)}. Student Answer: ${studentAnswer} Correct Solution: ${correctSolution}`;
+        // Prepare a prompt for OpenAI to get hints, including a request for line and column locations
+        const prompt = `
+            You are a programming instructor. Compare the following student's answer to the correct solution. Identify each difference with precise line and column positions where only the specific error occurs. Provide each issue in JSON format: 
+            
+            [{"startLine": number, "startColumn": number, "endLine": number, "endColumn": number, "hint": string}, ...]
+            
+            **Important**: 
+            - The JSON should reflect *only the exact error part* for startColumn and endColumn.
+            - Output JSON only. Avoid explanations, formatting markers, or code blocks.
+            
+            Student Answer: ${studentAnswer}
+            Correct Solution: ${correctSolution}
+        `;
+        console.log(studentAnswer)
+        console.log(correctSolution)
 
         const openaiResponse = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
+            model: "gpt-4o",
             messages: [
                 { role: "system", content: "You are a programming instructor." },
                 { role: "user", content: prompt },
             ],
         });
 
-        const openaiFeedback = openaiResponse.choices[0]?.message?.content;
+        // Extract and clean up the response
+        let openaiFeedback = openaiResponse.choices[0]?.message?.content || "";
+        console.log(openaiFeedback)
+        openaiFeedback = openaiFeedback.replace(/```json|```/g, "").trim();
+
+        let errorLocations: ErrorLocation[] = [];
+
+        try {
+            // Parse the cleaned AI response as JSON
+            errorLocations = JSON.parse(openaiFeedback);
+        } catch (parseError) {
+            console.error("Failed to parse AI feedback as JSON", parseError);
+            console.error("Received Feedback:", openaiFeedback);
+        }
 
         // Send the feedback and error locations to the client
         res.json({
             openaiFeedback,
             errorLocations: errorLocations.map((error, index) => ({
                 ...error,
-                hint: openaiFeedback?.split('\n')[index] || error.hint, // Use AI-generated hints
+                hint: error.hint, // Use AI-generated hints
             })),
         });
     } catch (error) {
